@@ -9,12 +9,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, LayoutDashboard } from 'lucide-react';
+import Link from 'next/link';
 
 export default function NewEventPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [createdEvent, setCreatedEvent] = useState<{ orgSlug: string, eventSlug: string } | null>(null);
 
   // Step 1: Event Info
   const [eventInfo, setEventInfo] = useState({
@@ -61,10 +63,14 @@ export default function NewEventPage() {
       let { data: orgs } = await supabase.from('organisations').select('id').limit(1);
       let orgId;
       if (!orgs || orgs.length === 0) {
-        const { data: newOrg } = await supabase.from('organisations').insert({
+        const { data: newOrg, error: newOrgError } = await supabase.from('organisations').insert({
           name: `${user.email}'s Org`,
           slug: user.email?.split('@')[0] || 'default-org',
         }).select().single();
+        
+        if (newOrgError) throw newOrgError;
+        if (!newOrg) throw new Error("Failed to create organization, returned data was null. (Check Supabase RLS policies)");
+        
         orgId = newOrg.id;
       } else {
         orgId = orgs[0].id;
@@ -97,7 +103,14 @@ export default function NewEventPage() {
         await supabase.from('judges').insert(judgeRows);
       }
 
-      router.push(`/dashboard`);
+      // 4. Invite Judges
+      // ... (judge logic)
+
+      setCreatedEvent({
+        orgSlug: orgs?.[0]?.slug || (user.email?.split('@')[0] || 'default-org'),
+        eventSlug: event.slug
+      });
+      setStep(4);
     } catch (err: any) {
       alert(err.message);
     } finally {
@@ -266,6 +279,27 @@ export default function NewEventPage() {
             <Button variant="outline" className="flex-1" onClick={() => setStep(2)}>Back</Button>
             <Button className="flex-1" onClick={handleFinish} disabled={loading}>
               {loading ? 'Creating...' : 'Finish & Launch'}
+            </Button>
+          </CardFooter>
+        </Card>
+      )}
+      {step === 4 && (
+        <Card className="text-center py-12 border-green-500 border-2">
+          <CardHeader>
+            <CardTitle className="text-3xl text-green-600">Success!</CardTitle>
+            <CardDescription className="text-lg mt-2">Your hackathon has been created and saved to the database.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-gray-600">You can check your Supabase dashboard to see the new rows in the <strong>events</strong>, <strong>rubric_criteria</strong>, and <strong>judges</strong> tables!</p>
+          </CardContent>
+          <CardFooter className="flex flex-col gap-3 mt-6">
+            <Button className="w-full bg-blue-600 hover:bg-blue-700" asChild>
+              <Link href={`/${createdEvent?.orgSlug}/${createdEvent?.eventSlug}`}>
+                Open Event Dashboard
+              </Link>
+            </Button>
+            <Button variant="outline" className="w-full" onClick={() => window.location.reload()}>
+              Create Another Event
             </Button>
           </CardFooter>
         </Card>
